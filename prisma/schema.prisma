@@ -11,7 +11,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [vector]
+  // extensions = [vector] // Commented out for Railway compatibility - enable when pgvector is installed
 }
 
 // ============================================
@@ -45,8 +45,14 @@ model Site {
   traffic     Json // { monthly, organic, referral }
   verifiedAt  DateTime?
   publisherId String? // FK to User (publisher)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+
+  // Data Entry Gates
+  origin             String  @default("PUBLISHER_OWNED") // PUBLISHER_OWNED, AGENCY_PORTFOLIO
+  verificationStatus String  @default("PENDING") // PENDING, VERIFIED, UNVERIFIED, REJECTED
+  isPrivate          Boolean @default(false) // Agency private portfolio flag
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   publisher User?             @relation(fields: [publisherId], references: [id], onDelete: SetNull)
@@ -56,6 +62,8 @@ model Site {
 
   @@index([publisherId])
   @@index([status])
+  @@index([origin])
+  @@index([verificationStatus])
   @@map("sites")
 }
 
@@ -73,7 +81,8 @@ model SiteDNA {
 
   // Vector embedding (1536 dimensions from OpenAI)
   // pgvector extension enables vector similarity search
-  vector Unsupported("vector(1536)")?
+  // Note: Using JSONB temporarily until pgvector is available on Railway
+  vector Json? // Temporarily using JSONB instead of vector(1536) for Railway compatibility
 
   // Top 1000 keywords from GSC (last 3 months)
   // Stored as array of strings for easy querying
