@@ -11,7 +11,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  // extensions = [vector] // Commented out for Railway compatibility - enable when pgvector is installed
+  extensions = [vector]
 }
 
 // ============================================
@@ -81,8 +81,7 @@ model SiteDNA {
 
   // Vector embedding (1536 dimensions from OpenAI)
   // pgvector extension enables vector similarity search
-  // Note: Using JSONB temporarily until pgvector is available on Railway
-  vector Json? // Temporarily using JSONB instead of vector(1536) for Railway compatibility
+  vector Unsupported("vector(1536)")?
 
   // Top 1000 keywords from GSC (last 3 months)
   // Stored as array of strings for easy querying

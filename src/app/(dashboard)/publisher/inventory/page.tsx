@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { InventoryClient } from "./InventoryClient";
 import { formatVerificationStatus, formatDomain, formatPrice } from "@/lib/utils";
 
+export const dynamic = 'force-dynamic';
+
 export default async function InventoryPage() {
   // Prisma ile gerçek verileri çek
   const sites = await prisma.site.findMany({

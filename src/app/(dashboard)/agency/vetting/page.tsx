@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { VettingClient } from "./VettingClient";
 import { formatDomain, formatPrice } from "@/lib/utils";
 
+export const dynamic = 'force-dynamic';
+
 // Trust Score hesaplama (0-100)
 function calculateTrustScore(metrics: { da?: number; dr?: number; spam?: number }): number {
   const da = metrics.da || 0;

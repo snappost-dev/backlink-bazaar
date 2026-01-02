@@ -10,6 +10,8 @@ import {
   formatPrice,
 } from "@/lib/utils";
 
+export const dynamic = 'force-dynamic';
+
 export default async function AgencyInventoryPage() {
   // Prisma ile gerçek verileri çek
   const sites = await prisma.site.findMany({
@@ -27,7 +29,7 @@ export default async function AgencyInventoryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">
-            ÖZEL PORTFÖY (CANLI V1.0)
+            ÖZEL PORTFÖY (VECTOR + DYNAMIC)
           </h1>
           <p className="mt-2 text-slate-600">
             Ajans portföyünüze özel siteler ekleyin (Doğrulama gerekmez)

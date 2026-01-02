@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { MarketplaceClient } from "./MarketplaceClient";
 import { formatDomain, formatPrice } from "@/lib/utils";
 
+export const dynamic = 'force-dynamic';
+
 export default async function MarketplacePage() {
   // Prisma ile gerçek verileri çek - Sadece APPROVED siteler
   const sites = await prisma.site.findMany({
