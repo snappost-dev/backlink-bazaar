@@ -1,35 +1,61 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// ============================================
+// BACKLINK BAZAAR - HEAVY ENGINEERING SCHEMA
+// ============================================
+// Based on: TECHNICAL_ARCH.md & PROJECT_BLUEPRINT.md
+// Snappost Backend Protocols (Gary)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 // ============================================
-// CORE TABLES
+// CORE ENTITIES
 // ============================================
 
-model Site {
-  id         String    @id @default(uuid())
-  domain     String    @unique
-  status     String // verified, pending, rejected
-  category   String
-  basePrice  Float
-  finalPrice Float
-  metrics    Json // { da, dr, spam }
-  traffic    Json // { monthly, organic, referral }
-  verifiedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      String // PUBLISHER, AGENCY, BUYER, ADMIN
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
+  sitesAsPublisher Site[]
+  ordersAsBuyer    Order[]
+  scoutingHistory  ScoutingHistory[]
+
+  @@map("users")
+}
+
+model Site {
+  id          String    @id @default(uuid())
+  domain      String    @unique
+  status      String // verified, pending, rejected
+  category    String
+  basePrice   Float
+  finalPrice  Float
+  metrics     Json // { da, dr, spam }
+  traffic     Json // { monthly, organic, referral }
+  verifiedAt  DateTime?
+  publisherId String? // FK to User (publisher)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  publisher User?             @relation(fields: [publisherId], references: [id], onDelete: SetNull)
   dna       SiteDNA?
   snapshots ScoutingHistory[]
+  orders    Order[]
 
+  @@index([publisherId])
+  @@index([status])
   @@map("sites")
 }
 
@@ -38,6 +64,7 @@ model Site {
 // ============================================
 // Stores OpenAI embeddings (1536 dimensions) for topic matching
 // Used for cosine similarity calculation between buyer and publisher sites
+// Reference: TECHNICAL_ARCH.md §1
 
 model SiteDNA {
   id     String @id @default(uuid())
@@ -45,17 +72,21 @@ model SiteDNA {
   site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   // Vector embedding (1536 dimensions from OpenAI)
-  // Note: Prisma doesn't natively support pgvector, so we use Unsupported
-  // The actual vector type will be created via raw SQL in migration
+  // pgvector extension enables vector similarity search
   vector Unsupported("vector(1536)")?
 
   // Top 1000 keywords from GSC (last 3 months)
-  keywords Json // Array of { keyword: string, clicks: number, impressions: number }
+  // Stored as array of strings for easy querying
+  topKeywords String[]
+
+  // Full keyword data with metrics (JSON for detailed info)
+  keywords Json? // Array of { keyword: string, clicks: number, impressions: number }
 
   // Metadata
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([siteId])
   @@map("site_dna")
 }
 
@@ -64,6 +95,7 @@ model SiteDNA {
 // ============================================
 // Immutable snapshot of site data at analysis time
 // Never UPDATE, always INSERT (Gary Protocol)
+// Reference: TECHNICAL_ARCH.md §2
 
 model ScoutingHistory {
   id     String @id @default(uuid())
@@ -71,10 +103,12 @@ model ScoutingHistory {
   site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   // Agency that performed the analysis
-  agencyId String // UUID of the agency user
+  agencyId String
+  agency   User   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
 
   // Complete snapshot of site data at analysis time (JSON blob)
-  snapshot Json // Contains: metrics, traffic, pricing, status, etc.
+  // Contains: metrics, traffic, pricing, status, etc.
+  snapshotData Json // Renamed from 'snapshot' for clarity
 
   // Optional: Diff summary (e.g., "Traffic increased 20%")
   diffSummary String?
@@ -85,4 +119,81 @@ model ScoutingHistory {
   @@index([agencyId])
   @@index([createdAt])
   @@map("scouting_history")
+}
+
+// ============================================
+// ORDER & THE BRIEFCASE
+// ============================================
+// Order management with Briefcase (draft/approved workflow)
+// Reference: PROJECT_BLUEPRINT.md §5
+
+model Order {
+  id     String @id @default(uuid())
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  // Buyer who placed the order
+  buyerId String
+  buyer   User   @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  // Order status
+  status String // pending, approved, in_progress, completed, cancelled
+
+  // Pricing
+  price      Float
+  finalPrice Float? // Final price after agency markup
+
+  // The Briefcase: Briefing data
+  // draftBrief: Buyer's initial input (from BriefingWizard)
+  // approvedBrief: Agency's approved/edited version
+  draftBrief    Json? // { readyText, rawData, aiInstruction, targetUrl, anchorText, deadline, placement }
+  approvedBrief Json? // Same structure, but agency-approved version
+
+  // Delivery
+  deadline      DateTime?
+  completedAt   DateTime?
+  publishedLink String? // Final published URL
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([siteId])
+  @@index([buyerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+// ============================================
+// VALUATION RULES (Price Engine)
+// ============================================
+// Dynamic pricing coefficients for the valuation engine
+// Optional but recommended for flexible pricing
+
+model ValuationRule {
+  id String @id @default(uuid())
+
+  // Minimum Domain Authority (DA) threshold
+  minDa Int @default(0)
+
+  // Traffic multiplier (e.g., 1.2 = 20% bonus for high traffic)
+  trafficMultiplier Float @default(1.0)
+
+  // Base floor price (minimum price regardless of metrics)
+  baseFloor Float @default(50.0)
+
+  // Category-specific multipliers
+  categoryMultipliers Json? // { "Technology": 1.1, "Health": 1.3, ... }
+
+  // Active flag
+  isActive Boolean @default(true)
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([minDa])
+  @@index([isActive])
+  @@map("valuation_rules")
 }
