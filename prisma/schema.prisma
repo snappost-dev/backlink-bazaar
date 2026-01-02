@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// CORE TABLES
+// ============================================
+
+model Site {
+  id         String    @id @default(uuid())
+  domain     String    @unique
+  status     String // verified, pending, rejected
+  category   String
+  basePrice  Float
+  finalPrice Float
+  metrics    Json // { da, dr, spam }
+  traffic    Json // { monthly, organic, referral }
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  dna       SiteDNA?
+  snapshots ScoutingHistory[]
+
+  @@map("sites")
+}
+
+// ============================================
+// TOPICAL DNA ENGINE (Vector Table)
+// ============================================
+// Stores OpenAI embeddings (1536 dimensions) for topic matching
+// Used for cosine similarity calculation between buyer and publisher sites
+
+model SiteDNA {
+  id     String @id @default(uuid())
+  siteId String @unique
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  // Vector embedding (1536 dimensions from OpenAI)
+  // Note: Prisma doesn't natively support pgvector, so we use Unsupported
+  // The actual vector type will be created via raw SQL in migration
+  vector Unsupported("vector(1536)")?
+
+  // Top 1000 keywords from GSC (last 3 months)
+  keywords Json // Array of { keyword: string, clicks: number, impressions: number }
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("site_dna")
+}
+
+// ============================================
+// SCOUTING HISTORY & SNAPSHOTS (Time Machine)
+// ============================================
+// Immutable snapshot of site data at analysis time
+// Never UPDATE, always INSERT (Gary Protocol)
+
+model ScoutingHistory {
+  id     String @id @default(uuid())
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  // Agency that performed the analysis
+  agencyId String // UUID of the agency user
+
+  // Complete snapshot of site data at analysis time (JSON blob)
+  snapshot Json // Contains: metrics, traffic, pricing, status, etc.
+
+  // Optional: Diff summary (e.g., "Traffic increased 20%")
+  diffSummary String?
+
+  createdAt DateTime @default(now())
+
+  @@index([siteId])
+  @@index([agencyId])
+  @@index([createdAt])
+  @@map("scouting_history")
+}
