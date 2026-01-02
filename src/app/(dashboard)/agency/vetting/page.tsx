@@ -1,47 +1,41 @@
-"use client";
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Database, Search, CheckCircle2, XCircle, Clock, TrendingUp, Shield, Eye, EyeOff } from "lucide-react";
-import { MOCK_SITES } from "@/lib/mock-data";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-
-// Maskelenmiş URL fonksiyonu
-const maskUrl = (domain: string): string => {
-  const parts = domain.split(".");
-  if (parts.length >= 2) {
-    const subdomain = parts[0];
-    const maskedSubdomain = subdomain.length > 3 
-      ? subdomain.substring(0, 2) + "***" 
-      : "***";
-    return `${maskedSubdomain}.${parts.slice(1).join(".")}`;
-  }
-  return domain;
-};
+import { Database, CheckCircle2, XCircle, Clock, Shield, Eye, EyeOff, AlertCircle } from "lucide-react";
+import prisma from "@/lib/prisma";
+import { VettingClient } from "./VettingClient";
+import { formatDomain, formatPrice } from "@/lib/utils";
 
 // Trust Score hesaplama (0-100)
-const calculateTrustScore = (metrics: { da: number; dr: number; spam: number }): number => {
-  const daScore = metrics.da * 1.2; // DA ağırlığı
-  const drScore = metrics.dr * 1.0; // DR ağırlığı
-  const spamPenalty = metrics.spam * 10; // Spam cezası
+function calculateTrustScore(metrics: { da?: number; dr?: number; spam?: number }): number {
+  const da = metrics.da || 0;
+  const dr = metrics.dr || 0;
+  const spam = metrics.spam || 0;
+  const daScore = da * 1.2;
+  const drScore = dr * 1.0;
+  const spamPenalty = spam * 10;
   const score = Math.min(100, Math.max(0, (daScore + drScore) - spamPenalty));
   return Math.round(score);
-};
+}
 
-export default function VettingPage() {
-  const [showMasked, setShowMasked] = useState(true);
-  const router = useRouter();
+export default async function VettingPage() {
+  // Prisma ile PENDING veya UNVERIFIED siteleri çek
+  const sites = await prisma.site.findMany({
+    where: {
+      OR: [
+        { verificationStatus: "PENDING" },
+        { verificationStatus: "UNVERIFIED" },
+      ],
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
 
-  const mockVettingQueue = [
-    { ...MOCK_SITES[0], status: "approved", reviewedAt: "2024-03-15" },
-    { ...MOCK_SITES[1], status: "pending", reviewedAt: null },
-    { ...MOCK_SITES[2], status: "rejected", reviewedAt: "2024-03-10", reason: "Spam skoru yüksek" },
-  ].map((site) => ({
-    ...site,
-    maskedUrl: maskUrl(site.domain),
-    trustScore: calculateTrustScore(site.metrics),
-  }));
+  // Stats hesapla
+  const totalSites = sites.length;
+  const approvedSites = sites.filter((s: typeof sites[0]) => s.status === "approved").length;
+  const pendingSites = sites.filter((s: typeof sites[0]) => s.status === "pending" || s.verificationStatus === "PENDING" || s.verificationStatus === "UNVERIFIED").length;
+  const rejectedSites = sites.filter((s: typeof sites[0]) => s.status === "rejected").length;
 
   return (
     <div className="space-y-6">
@@ -55,24 +49,7 @@ export default function VettingPage() {
             Siteleri analiz edin ve doğrulayın
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowMasked(!showMasked)}
-          className="rounded-[2.5rem]"
-        >
-          {showMasked ? (
-            <>
-              <EyeOff className="w-4 h-4 mr-2" />
-              Maskeyi Kaldır
-            </>
-          ) : (
-            <>
-              <Eye className="w-4 h-4 mr-2" />
-              URL'leri Gizle
-            </>
-          )}
-        </Button>
+        <VettingClient />
       </div>
 
       {/* Stats Cards */}
@@ -80,7 +57,7 @@ export default function VettingPage() {
         <Card>
           <CardHeader className="pb-3">
             <CardDescription>Toplam Site</CardDescription>
-            <CardTitle className="text-2xl">{mockVettingQueue.length}</CardTitle>
+            <CardTitle className="text-2xl">{totalSites}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -89,9 +66,7 @@ export default function VettingPage() {
               <CardDescription>Onaylanan</CardDescription>
               <CheckCircle2 className="w-5 h-5 text-green-600" />
             </div>
-            <CardTitle className="text-2xl text-green-600">
-              {mockVettingQueue.filter((s) => s.status === "approved").length}
-            </CardTitle>
+            <CardTitle className="text-2xl text-green-600">{approvedSites}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -100,9 +75,7 @@ export default function VettingPage() {
               <CardDescription>Beklemede</CardDescription>
               <Clock className="w-5 h-5 text-yellow-600" />
             </div>
-            <CardTitle className="text-2xl text-yellow-600">
-              {mockVettingQueue.filter((s) => s.status === "pending").length}
-            </CardTitle>
+            <CardTitle className="text-2xl text-yellow-600">{pendingSites}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -111,122 +84,131 @@ export default function VettingPage() {
               <CardDescription>Reddedilen</CardDescription>
               <XCircle className="w-5 h-5 text-red-600" />
             </div>
-            <CardTitle className="text-2xl text-red-600">
-              {mockVettingQueue.filter((s) => s.status === "rejected").length}
-            </CardTitle>
+            <CardTitle className="text-2xl text-red-600">{rejectedSites}</CardTitle>
           </CardHeader>
         </Card>
       </div>
 
-      {/* Vetting Queue */}
-      <div className="grid grid-cols-1 gap-4">
-        {mockVettingQueue.map((site) => (
-          <Card
-            key={site.id}
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => router.push(`/agency/vetting/${site.id}`)}
-          >
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <CardTitle className="text-xl">
-                      {showMasked ? site.maskedUrl : site.domain}
-                    </CardTitle>
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-[2.5rem] bg-indigo-100 text-indigo-700">
-                      <Shield className="w-4 h-4" />
-                      <span className="text-sm font-semibold">
-                        Trust: {site.trustScore}
-                      </span>
+      {/* Empty State */}
+      {sites.length === 0 ? (
+        <Card className="border-dashed border-2 border-indigo-300">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center mb-4">
+              <AlertCircle className="w-8 h-8 text-indigo-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">
+              Onay bekleyen site yok
+            </h3>
+            <p className="text-sm text-slate-600 text-center max-w-md">
+              Şu an onay bekleyen site bulunmuyor. Yeni siteler eklendiğinde burada görünecektir.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        /* Vetting Queue */
+        <div className="grid grid-cols-1 gap-4">
+          {sites.map((site: typeof sites[0]) => {
+            const metrics = (site.metrics as { da?: number; dr?: number; spam?: number }) || {};
+            const traffic = (site.traffic as {
+              monthly?: number;
+              organic?: number;
+              referral?: number;
+            }) || {};
+            const trustScore = calculateTrustScore(metrics);
+
+            return (
+              <Card key={site.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <CardTitle className="text-xl">{formatDomain(site.domain)}</CardTitle>
+                        <div className="flex items-center gap-2 px-3 py-1 rounded-[2.5rem] bg-indigo-100 text-indigo-700">
+                          <Shield className="w-4 h-4" />
+                          <span className="text-sm font-semibold">Trust: {trustScore}</span>
+                        </div>
+                      </div>
+                      <CardDescription className="mt-1">
+                        {site.category || "Kategori Belirtilmedi"} • DA: {metrics.da || 0} • DR:{" "}
+                        {metrics.dr || 0} • Spam: {metrics.spam || 0}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {site.status === "approved" ? (
+                        <span className="flex items-center gap-1 px-3 py-1 rounded-[2.5rem] bg-green-100 text-green-700 text-sm font-medium">
+                          <CheckCircle2 className="w-4 h-4" />
+                          Onaylandı
+                        </span>
+                      ) : site.verificationStatus === "PENDING" || site.verificationStatus === "UNVERIFIED" ? (
+                        <span className="flex items-center gap-1 px-3 py-1 rounded-[2.5rem] bg-yellow-100 text-yellow-700 text-sm font-medium">
+                          <Clock className="w-4 h-4" />
+                          Beklemede
+                        </span>
+                      ) : site.status === "rejected" ? (
+                        <span className="flex items-center gap-1 px-3 py-1 rounded-[2.5rem] bg-red-100 text-red-700 text-sm font-medium">
+                          <XCircle className="w-4 h-4" />
+                          Reddedildi
+                        </span>
+                      ) : null}
                     </div>
                   </div>
-                  <CardDescription className="mt-1">
-                    {site.category} • DA: {site.metrics.da} • DR: {site.metrics.dr} • Spam: {site.metrics.spam}
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  {site.status === "approved" && (
-                    <span className="flex items-center gap-1 px-3 py-1 rounded-[2.5rem] bg-green-100 text-green-700 text-sm font-medium">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Onaylandı
-                    </span>
-                  )}
-                  {site.status === "pending" && (
-                    <span className="flex items-center gap-1 px-3 py-1 rounded-[2.5rem] bg-yellow-100 text-yellow-700 text-sm font-medium">
-                      <Clock className="w-4 h-4" />
-                      Beklemede
-                    </span>
-                  )}
-                  {site.status === "rejected" && (
-                    <span className="flex items-center gap-1 px-3 py-1 rounded-[2.5rem] bg-red-100 text-red-700 text-sm font-medium">
-                      <XCircle className="w-4 h-4" />
-                      Reddedildi
-                    </span>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Metrics */}
-                <div className="space-y-2">
-                  <div className="text-sm font-medium text-slate-600">Metrikler</div>
-                  <div className="pl-6 space-y-1">
-                    <p className="text-sm">
-                      Trafik: <span className="font-semibold">{site.traffic.monthly.toLocaleString("tr-TR")}</span>
-                    </p>
-                    <p className="text-sm">
-                      Organik: <span className="font-semibold">{site.traffic.organic.toLocaleString("tr-TR")}</span>
-                    </p>
-                  </div>
-                </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Metrics */}
+                    {(traffic.monthly || traffic.organic) && (
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium text-slate-600">Metrikler</div>
+                        <div className="pl-6 space-y-1">
+                          {traffic.monthly && (
+                            <p className="text-sm">
+                              Trafik:{" "}
+                              <span className="font-semibold">
+                                {traffic.monthly.toLocaleString("tr-TR")}
+                              </span>
+                            </p>
+                          )}
+                          {traffic.organic && (
+                            <p className="text-sm">
+                              Organik:{" "}
+                              <span className="font-semibold">
+                                {traffic.organic.toLocaleString("tr-TR")}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
-                {/* Pricing */}
-                <div className="space-y-2">
-                  <div className="text-sm font-medium text-slate-600">Fiyatlandırma</div>
-                  <div className="pl-6 space-y-1">
-                    <p className="text-sm">
-                      Base: <span className="font-semibold">${site.basePrice}</span>
-                    </p>
-                    <p className="text-sm">
-                      Final: <span className="font-semibold text-indigo-600">${site.finalPrice}</span>
-                    </p>
-                  </div>
-                </div>
+                    {/* Pricing */}
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-slate-600">Fiyatlandırma</div>
+                      <div className="pl-6 space-y-1">
+                        <p className="text-sm">
+                          Base: <span className="font-semibold">{formatPrice(site.basePrice)}</span>
+                        </p>
+                        <p className="text-sm">
+                          Final:{" "}
+                          <span className="font-semibold text-indigo-600">
+                            {formatPrice(site.finalPrice)}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
 
-                {/* Actions */}
-                <div className="flex items-end justify-end gap-2">
-                  {site.status === "pending" && (
-                    <>
-                      <Button variant="outline" size="sm" className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100">
-                        Onayla
-                      </Button>
-                      <Button variant="outline" size="sm" className="bg-red-50 border-red-200 text-red-700 hover:bg-red-100">
-                        Reddet
-                      </Button>
-                    </>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => router.push(`/agency/vetting/${site.id}`)}
-                  >
-                    Detaylar
-                  </Button>
-                </div>
-              </div>
-              {site.status === "rejected" && site.reason && (
-                <div className="mt-4 p-3 rounded-[2.5rem] bg-red-50 border border-red-200">
-                  <p className="text-sm text-red-700">
-                    <strong>Red Nedeni:</strong> {site.reason}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                    {/* Actions */}
+                    <div className="flex items-end justify-end gap-2">
+                      {(site.verificationStatus === "PENDING" || site.verificationStatus === "UNVERIFIED") && (
+                        <VettingClient siteId={site.id} siteFinalPrice={site.finalPrice} />
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
-

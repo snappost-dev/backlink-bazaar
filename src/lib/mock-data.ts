@@ -1,75 +1,6 @@
 import { Globe, Database, ShoppingCart, Wallet, CheckCircle2, Settings, BarChart3, Users, FileText, Shield, ShieldAlert, AlertTriangle } from "lucide-react";
 
-// Mock Site Verileri
-export const MOCK_SITES = [
-  {
-    id: "site-1",
-    domain: "techblog.example.com",
-    status: "verified",
-    category: "Technology",
-    basePrice: 150,
-    finalPrice: 180,
-    traffic: {
-      monthly: 45000,
-      organic: 38000,
-      referral: 7000,
-    },
-    metrics: {
-      da: 45,
-      dr: 38,
-      spam: 2,
-    },
-    verifiedAt: "2024-01-15",
-  },
-  {
-    id: "site-2",
-    domain: "healthguide.example.com",
-    status: "pending",
-    category: "Health",
-    basePrice: 200,
-    finalPrice: 240,
-    traffic: {
-      monthly: 68000,
-      organic: 55000,
-      referral: 13000,
-    },
-    metrics: {
-      da: 52,
-      dr: 41,
-      spam: 1,
-    },
-    verifiedAt: null,
-  },
-  {
-    id: "site-3",
-    domain: "financehub.example.com",
-    status: "verified",
-    category: "Finance",
-    basePrice: 300,
-    finalPrice: 360,
-    traffic: {
-      monthly: 92000,
-      organic: 78000,
-      referral: 14000,
-    },
-    metrics: {
-      da: 58,
-      dr: 45,
-      spam: 0,
-    },
-    verifiedAt: "2024-02-01",
-  },
-];
-
-// Traffic Data
-export const TRAFFIC_DATA = {
-  monthly: 205000,
-  organic: 171000,
-  referral: 34000,
-  growth: 12.5,
-};
-
-// Rol Konfigürasyonları
+// Rol Konfigürasyonları (Menu yapısı için)
 export const ROLE_CONFIGS = {
   PUBLISHER: {
     color: "blue",
@@ -118,4 +49,3 @@ export const ROLE_CONFIGS = {
 
 // Mevcut rol (mock - gerçek uygulamada auth'dan gelecek)
 export const CURRENT_ROLE: keyof typeof ROLE_CONFIGS = "PUBLISHER";
-

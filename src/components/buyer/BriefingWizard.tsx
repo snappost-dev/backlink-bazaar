@@ -5,12 +5,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Wand2, FileText, Database, Sparkles, ShoppingCart } from "lucide-react";
-import { MOCK_SITES } from "@/lib/mock-data";
+
+interface Site {
+  id: string;
+  domain: string;
+  category: string;
+  finalPrice: number;
+  metrics?: any;
+  traffic?: any;
+  status?: string;
+}
 
 interface BriefingWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  site: typeof MOCK_SITES[0] | null;
+  site: Site | null;
 }
 
 export default function BriefingWizard({ open, onOpenChange, site }: BriefingWizardProps) {
