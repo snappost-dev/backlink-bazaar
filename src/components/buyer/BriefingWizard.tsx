@@ -26,20 +26,68 @@ export default function BriefingWizard({ open, onOpenChange, site }: BriefingWiz
 
   if (!site) return null;
 
-  const handleSubmit = () => {
-    console.log("Briefing submitted:", { site, formData });
-    alert("Sipariş başarıyla oluşturuldu!");
-    onOpenChange(false);
-    // Reset
-    setActiveTab("text");
-    setFormData({
-      readyText: "",
-      rawData: "",
-      aiInstruction: "",
-      targetUrl: "",
-      anchorText: "",
-      deadline: "",
-    });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!site) return;
+
+    setIsSubmitting(true);
+
+    try {
+      // Mock buyer ID - gerçek uygulamada auth'dan gelecek
+      const buyerId = "client@brand.com"; // Seed'den gelen buyer ID
+
+      // Draft brief oluştur
+      const draftBrief = {
+        readyText: formData.readyText,
+        rawData: formData.rawData,
+        aiInstruction: formData.aiInstruction,
+        targetUrl: formData.targetUrl,
+        anchorText: formData.anchorText,
+        deadline: formData.deadline,
+        placement: "content", // Default placement
+      };
+
+      // API'ye POST isteği gönder
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          siteId: site.id,
+          buyerId: buyerId, // TODO: Auth'dan alınacak
+          draftBrief: draftBrief,
+          price: site.finalPrice,
+          deadline: formData.deadline || null,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Sipariş oluşturulamadı");
+      }
+
+      alert("Sipariş başarıyla oluşturuldu!");
+      onOpenChange(false);
+
+      // Reset form
+      setActiveTab("text");
+      setFormData({
+        readyText: "",
+        rawData: "",
+        aiInstruction: "",
+        targetUrl: "",
+        anchorText: "",
+        deadline: "",
+      });
+    } catch (error: any) {
+      console.error("Order creation error:", error);
+      alert(`Hata: ${error.message || "Sipariş oluşturulamadı"}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -176,9 +224,13 @@ export default function BriefingWizard({ open, onOpenChange, site }: BriefingWiz
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             İptal
           </Button>
-          <Button onClick={handleSubmit} className="bg-slate-900 hover:bg-slate-800">
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+            className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50"
+          >
             <ShoppingCart className="w-4 h-4 mr-2" />
-            Siparişi Tamamla
+            {isSubmitting ? "Gönderiliyor..." : "Siparişi Tamamla"}
           </Button>
         </DialogFooter>
       </DialogContent>
