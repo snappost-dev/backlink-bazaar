@@ -9,6 +9,7 @@ import {
   formatDomain,
   formatPrice,
 } from "@/lib/utils";
+import Link from "next/link";
 
 export const dynamic = 'force-dynamic';
 
@@ -88,20 +89,22 @@ export default async function AgencyInventoryPage() {
             }) || {};
 
             return (
-              <Card key={site.id} className="border-indigo-200">
+              <Card key={site.id} className="border-indigo-200 hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
+                    <Link href={`/agency/inventory/${site.id}`} className="flex items-center gap-3 flex-1">
                       <div className="w-12 h-12 rounded-[2.5rem] bg-indigo-100 flex items-center justify-center">
                         <Globe className="w-6 h-6 text-indigo-600" />
                       </div>
                       <div>
-                        <CardTitle className="text-xl">{formatDomain(site.domain)}</CardTitle>
+                        <CardTitle className="text-xl hover:text-indigo-600 transition-colors">
+                          {formatDomain(site.domain)}
+                        </CardTitle>
                         <CardDescription className="mt-1">
                           {site.category || "Kategori Belirtilmedi"} • {formatOrigin(site.origin)}
                         </CardDescription>
                       </div>
-                    </div>
+                    </Link>
                     <div className="flex items-center gap-2">
                       {site.isPrivate && (
                         <span className="flex items-center gap-1 px-3 py-1 rounded-[2.5rem] bg-indigo-100 text-indigo-700 text-sm font-medium">
@@ -181,9 +184,11 @@ export default async function AgencyInventoryPage() {
 
                     {/* Actions */}
                     <div className="flex items-end justify-end pt-2">
-                      <Button variant="outline" size="sm">
-                        Detaylar
-                      </Button>
+                      <Link href={`/agency/inventory/${site.id}`}>
+                        <Button variant="outline" size="sm" className="rounded-[2.5rem]">
+                          Yönet
+                        </Button>
+                      </Link>
                     </div>
                   </div>
                 </CardContent>
