@@ -3,6 +3,8 @@ import { TrendingUp, Eye, DollarSign, Link2, AlertCircle } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { formatDomain, formatPrice } from "@/lib/utils";
 
+export const dynamic = 'force-dynamic';
+
 export default async function AnalyticsPage() {
   // Publisher'ın sitelerini çek
   const sites = await prisma.site.findMany({

@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 import { formatDomain, formatVerificationStatus } from "@/lib/utils";
 import { VerificationClient } from "./VerificationClient";
 
+export const dynamic = 'force-dynamic';
+
 export default async function VerificationPage() {
   // Publisher'ın sitelerini çek
   const sites = await prisma.site.findMany({
