@@ -11,7 +11,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [vector]
+  // extensions = [vector] // Geçici olarak devre dışı - vector extension yüklü değil
 }
 
 // ============================================
@@ -23,13 +23,15 @@ model User {
   email     String   @unique
   name      String?
   role      String // PUBLISHER, AGENCY, BUYER, ADMIN
+  credits   Int      @default(100) // Agency kredi sistemi
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  sitesAsPublisher Site[]
-  ordersAsBuyer    Order[]
-  scoutingHistory  ScoutingHistory[]
+  sitesAsPublisher     Site[]
+  ordersAsBuyer        Order[]
+  scoutingHistory      ScoutingHistory[]
+  agencyTransactions   AgencyTransaction[]
 
   @@map("users")
 }
@@ -51,12 +53,33 @@ model Site {
   verificationStatus String  @default("PENDING") // PENDING, VERIFIED, UNVERIFIED, REJECTED
   isPrivate          Boolean @default(false) // Agency private portfolio flag
 
+  // SEO Data (DataForSEO) - Raw-Analysis-Push Mimarisi
+  rawSeoData    Json?     // Ana Kasa: API'den gelen HAM veri (tasks dizisi + local_audit)
+  snappostScore Int?      @default(0) // Hızlı okuma: Global Skor (0-100)
+  trafficData   Json?     // Hızlı okuma: İşlenmiş trafik verileri
+  lastSeoCheck  DateTime? // Son SEO kontrolü zamanı
+
+  // 10 Boyutlu Alt Skorlar (Hybrid SEO Engine v2.0)
+  s_tech        Int?      // Technical Score (CF Worker)
+  s_sem         Int?      // Semantic Score (DFS + CF)
+  s_link        Int?      // Link Equity (DFS)
+  s_schema      Int?      // Schema Health (CF)
+  s_mon         Int?      // Monetization (DFS)
+  s_eeat        Int?      // Trust Rank (E-EAT) (DFS)
+  s_fresh       Int?      // Freshness (CF + DFS)
+  s_viral       Int?      // Viral Potential (CF)
+  s_ux          Int?      // UX Flow (CF Browser Rendering)
+  s_global      Int?      // Hesaplanan Ağırlıklı Skor
+
+  // Aksiyon Önerileri
+  seoFixes      Json?     // Format: [{ code: 'NO_H1', priority: 'HIGH', message: '...' }]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
   publisher User?             @relation(fields: [publisherId], references: [id], onDelete: SetNull)
-  dna       SiteDNA?
+  // dna       SiteDNA? // Geçici olarak devre dışı - vector extension gerekli
   snapshots ScoutingHistory[]
   orders    Order[]
 
@@ -73,30 +96,31 @@ model Site {
 // Stores OpenAI embeddings (1536 dimensions) for topic matching
 // Used for cosine similarity calculation between buyer and publisher sites
 // Reference: TECHNICAL_ARCH.md §1
+// GEÇİCİ OLARAK DEVRE DIŞI: Vector extension veritabanında yüklü değil
 
-model SiteDNA {
-  id     String @id @default(uuid())
-  siteId String @unique
-  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
-  // Vector embedding (1536 dimensions from OpenAI)
-  // pgvector extension enables vector similarity search
-  vector Unsupported("vector(1536)")?
-
-  // Top 1000 keywords from GSC (last 3 months)
-  // Stored as array of strings for easy querying
-  topKeywords String[]
-
-  // Full keyword data with metrics (JSON for detailed info)
-  keywords Json? // Array of { keyword: string, clicks: number, impressions: number }
-
-  // Metadata
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([siteId])
-  @@map("site_dna")
-}
+// model SiteDNA {
+//   id     String @id @default(uuid())
+//   siteId String @unique
+//   site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+//
+//   // Vector embedding (1536 dimensions from OpenAI)
+//   // pgvector extension enables vector similarity search
+//   vector Unsupported("vector(1536)")?
+//
+//   // Top 1000 keywords from GSC (last 3 months)
+//   // Stored as array of strings for easy querying
+//   topKeywords String[]
+//
+//   // Full keyword data with metrics (JSON for detailed info)
+//   keywords Json? // Array of { keyword: string, clicks: number, impressions: number }
+//
+//   // Metadata
+//   createdAt DateTime @default(now())
+//   updatedAt DateTime @updatedAt
+//
+//   @@index([siteId])
+//   @@map("site_dna")
+// }
 
 // ============================================
 // SCOUTING HISTORY & SNAPSHOTS (Time Machine)
@@ -205,4 +229,25 @@ model ValuationRule {
   @@index([minDoz])
   @@index([isActive])
   @@map("valuation_rules")
+}
+
+// ============================================
+// AGENCY CREDIT SYSTEM
+// ============================================
+// Kredi işlemleri için transaction log
+// Reference: DataForSEO entegrasyonu
+
+model AgencyTransaction {
+  id          String   @id @default(uuid())
+  agencyId    String   // FK to User (role='AGENCY')
+  agency      User     @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  amount      Int      // Pozitif: kredi ekleme, Negatif: kredi kullanımı
+  type        String   // CREDIT_PURCHASE, SEO_ANALYSIS, REFUND, etc.
+  description String?  // İşlem açıklaması
+  createdAt   DateTime @default(now())
+
+  @@index([agencyId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("agency_transactions")
 }
