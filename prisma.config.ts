@@ -11,5 +11,8 @@ export default defineConfig({
   },
   datasource: {
     url: process.env["DATABASE_URL"],
+    // Note: Shadow database disabled for pgvector extension compatibility
+    // Use PRISMA_DISABLE_SHADOW_DATABASE=1 environment variable or manual migration
+    // For production: Use prisma migrate deploy instead of migrate dev
   },
 });

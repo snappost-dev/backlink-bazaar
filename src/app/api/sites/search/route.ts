@@ -1,20 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-
-// Mock embedding function (OpenAI yerine basit bir hash-based vektör)
-function generateMockEmbedding(text: string): number[] {
-  // Basit bir hash-based vektör oluştur (1536 boyut)
-  // Gerçek uygulamada OpenAI API kullanılacak
-  const vector: number[] = [];
-  const hash = text.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  
-  for (let i = 0; i < 1536; i++) {
-    const seed = (hash + i) % 1000;
-    vector.push((Math.sin(seed) + 1) / 2); // 0-1 arası normalize
-  }
-  
-  return vector;
-}
+import { generateEmbedding } from '@/lib/services/embedding-service';
 
 // POST: Vector search ile site arama
 export async function POST(request: NextRequest) {
@@ -32,8 +18,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Query'yi vektöre çevir
-    const queryVector = generateMockEmbedding(query);
+    // Query'yi vektöre çevir (real embedding service)
+    const queryVector = await generateEmbedding(query);
 
     // pgvector ile cosine similarity araması
     // Prisma raw query kullanarak vector search yapıyoruz
@@ -66,21 +52,27 @@ export async function POST(request: NextRequest) {
         id: { in: siteIds },
         status: 'verified',
       },
-      include: {
-        dna: {
-          select: {
-            topKeywords: true,
-          },
-        },
-      },
+      // Note: dna relation will be available after Prisma client regeneration
+      // For now, we'll get dna data separately if needed
     });
+
+    // Get SiteDNA data separately (raw query until Prisma client regenerated)
+    const dnaData = await prisma.$queryRawUnsafe<Array<{
+      "siteId": string;
+      "topKeywords": string[];
+    }>>(
+      `SELECT "siteId", "topKeywords" FROM site_dna WHERE "siteId" = ANY($1::text[])`,
+      siteIds
+    );
 
     // Similarity skorlarını ekle
     const sitesWithSimilarity = sites.map((site) => {
       const match = results.find((r) => r.siteId === site.id);
+      const dna = dnaData.find((d) => d.siteId === site.id);
       return {
         ...site,
         similarity: match ? Number(match.similarity) : 0,
+        dna: dna ? { topKeywords: dna.topKeywords } : null,
       };
     });
 
@@ -109,19 +101,31 @@ export async function POST(request: NextRequest) {
             { category: { contains: query, mode: 'insensitive' } },
           ],
         },
-        include: {
-          dna: {
-            select: {
-              topKeywords: true,
-            },
-          },
-        },
         take: limit,
       });
 
+      // Get SiteDNA data separately if sites found
+      const fallbackSiteIds = sites.map((s) => s.id);
+      const fallbackDnaData = fallbackSiteIds.length > 0 
+        ? await prisma.$queryRawUnsafe<Array<{
+            "siteId": string;
+            "topKeywords": string[];
+          }>>(
+            `SELECT "siteId", "topKeywords" FROM site_dna WHERE "siteId" = ANY($1::text[])`,
+            fallbackSiteIds
+          )
+        : [];
+
       return NextResponse.json({
         success: true,
-        data: sites.map((s) => ({ ...s, similarity: 0.5 })), // Fallback similarity
+        data: sites.map((s) => {
+          const dna = fallbackDnaData.find((d) => d.siteId === s.id);
+          return { 
+            ...s, 
+            similarity: 0.5, // Fallback similarity
+            dna: dna ? { topKeywords: dna.topKeywords } : null,
+          };
+        }),
         query: query,
         count: sites.length,
         fallback: true,

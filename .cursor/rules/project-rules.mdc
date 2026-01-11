@@ -1,3 +1,19 @@
----
+-# PROJECT CONTEXT: BACKLINK BAZAAR (Snappost Exchange)
+
+**Stack:** Next.js 16 (App Router), React 19, Tailwind CSS, Prisma, Shadcn/UI.
+**Design System:**
+- Radius: Aggressive rounded corners (`rounded-[2.5rem]`).
+- Colors: Slate (Neutral), Indigo (Agency Brand), Blue (Publisher), Red (Admin).
+- Icons: `lucide-react`.
+
+**Architecture Rules:**
+- **Role-Based:** Folders must follow `src/app/(dashboard)/[role]/...` structure.
+- **Frontend-First:** Always scaffold UI with Mock Data (`src/lib/mock-data.ts`) before connecting DB.
+- **Whitelabel:** Buyer interface is dynamic based on subdomain.
+
+**Critical Constraints:**
+- Never expose `base_price` to the client.
+- Always use `uuid` for IDs.
+- Animations: Use `animate-in fade-in zoom-in` for all modals/cards.--
 alwaysApply: true
 ---

@@ -11,7 +11,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  // extensions = [vector] // Geçici olarak devre dışı - vector extension yüklü değil
+  extensions = [vector] // Aktif edildi - pgvector extension için
 }
 
 // ============================================
@@ -79,7 +79,7 @@ model Site {
 
   // Relations
   publisher User?             @relation(fields: [publisherId], references: [id], onDelete: SetNull)
-  // dna       SiteDNA? // Geçici olarak devre dışı - vector extension gerekli
+  dna       SiteDNA?          // Aktif edildi - Vector similarity search için
   snapshots ScoutingHistory[]
   orders    Order[]
 
@@ -93,34 +93,41 @@ model Site {
 // ============================================
 // TOPICAL DNA ENGINE (Vector Table)
 // ============================================
-// Stores OpenAI embeddings (1536 dimensions) for topic matching
+// Stores embeddings (1536 dimensions) for topic matching
 // Used for cosine similarity calculation between buyer and publisher sites
+// Embeddings generated from: Gemini AI insights + SEO data (keywords, scores)
 // Reference: TECHNICAL_ARCH.md §1
-// GEÇİCİ OLARAK DEVRE DIŞI: Vector extension veritabanında yüklü değil
+// AKTİF: Vector extension ile birlikte kullanılıyor
 
-// model SiteDNA {
-//   id     String @id @default(uuid())
-//   siteId String @unique
-//   site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
-//
-//   // Vector embedding (1536 dimensions from OpenAI)
-//   // pgvector extension enables vector similarity search
-//   vector Unsupported("vector(1536)")?
-//
-//   // Top 1000 keywords from GSC (last 3 months)
-//   // Stored as array of strings for easy querying
-//   topKeywords String[]
-//
-//   // Full keyword data with metrics (JSON for detailed info)
-//   keywords Json? // Array of { keyword: string, clicks: number, impressions: number }
-//
-//   // Metadata
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-//
-//   @@index([siteId])
-//   @@map("site_dna")
-// }
+model SiteDNA {
+  id     String @id @default(uuid())
+  siteId String @unique
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  // Vector embedding (1536 dimensions - OpenAI/Gemini compatible)
+  // pgvector extension enables vector similarity search
+  // Generated from: Gemini AI insights + SEO metrics (combined text representation)
+  vector Unsupported("vector(1536)")?
+
+  // Top keywords (for quick access - extracted from ranked_keywords API)
+  // Top 1000 keywords from SEO analysis
+  topKeywords String[]
+
+  // Full keyword data with metrics (JSON for detailed info)
+  // Array of { keyword: string, clicks: number, impressions: number, rank: number }
+  keywords Json? // From ranked_keywords API response
+
+  // AI Insights metadata (from Gemini generateSiteInsights)
+  // Stores SiteInsights object for context: category, summary, risk, price, pros, cons
+  aiInsights Json? // SiteInsights interface as JSON
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([siteId])
+  @@map("site_dna")
+}
 
 // ============================================
 // SCOUTING HISTORY & SNAPSHOTS (Time Machine)
